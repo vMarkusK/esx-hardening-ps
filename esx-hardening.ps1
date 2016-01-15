@@ -3,10 +3,13 @@
 if (!(get-pssnapin -name VMware.VimAutomation.Core -erroraction silentlycontinue)) {
     add-pssnapin VMware.VimAutomation.Core
 }
+# Global
+$mgmtServices = @("sshClient","webAccess")
 # Inputs
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null
-$HostList = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts FQDN or IP", "Hosts", "esx01.test.lab") 
-$ESXiHostList = Get-VMHost -Name $HostList
+$HostList = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
+$trasg = Connect-VIServer $HostList
+$ESXiHostList = Get-VMHost
 
 # Read XML
 $Validate = $true
@@ -22,31 +25,45 @@ If ($Validate) {
         $NTP2 = $Variable.Config.NTP.Second
         Write-Host "NTP List: $NTP1, $NTP2" -ForegroundColor DarkGray
 
+        $SSHenaled = $Variable.Config.SSH.Enabled
+        Write-Host "Enabling SSH: $SSHenaled" -ForegroundColor DarkGray
+        $SSHTimeout = $Variable.Config.SSH.Timeout
+        Write-Host "SSH Tmeout: $SSHTimeout" -ForegroundColor DarkGray
+
+        $SyslogEnaled = $Variable.Config.Syslog.Enabled
+        Write-Host "Enabling Syslog: $SyslogEnaled" -ForegroundColor DarkGray
+        $SyslogServer = $Variable.Config.Syslog.Server
+        Write-Host "Syslog Server: $SyslogServer" -ForegroundColor DarkGray
+
+
         $SNMP_NET = ($Variable.Config.Variable | Where-Object {$_.Name -eq "SNMP_NET"}).Value
         Write-Host "Firewall SNMP Network: $SNMP_NET" -ForegroundColor DarkGray
+        $MGMT_NET = ($Variable.Config.Variable | Where-Object {$_.Name -eq "MGMT_NET"}).Value
+        Write-Host "Firewall MGMT Network (SSH, vSphere Client): $MGMT_NET" -ForegroundColor DarkGray
     }
 
 
 
 foreach ($ESXiHost in $ESXiHostList){
-# Configure NTP
-Write-Host "NTP Configuration on $ESXiHost started..." -ForegroundColor Green
-$ESXiHost | add-vmhostntpserver -ntpserver $NTP1  -confirm:$False -ErrorAction SilentlyContinue
-$ESXiHost | add-vmhostntpserver -ntpserver $NTP2  -confirm:$False -ErrorAction SilentlyContinue
-$ntpservice = $ESXiHost | get-vmhostservice | Where-Object {$_.key -eq "ntpd"} 
-Set-vmhostservice -HostService $ntpservice -Policy "on" -confirm:$False | Out-Null
-$hosttimesystem = get-view $ESXiHost.ExtensionData.ConfigManager.DateTimeSystem 
-$hosttimesystem.UpdateDateTime([DateTime]::UtcNow) 
-start-vmhostservice -HostService $ntpservice -confirm:$False | Out-Null
-Write-Host "NTP Configuration on $ESXiHost.Name finished..." -ForegroundColor Green
+    # Configure NTP
+    Write-Host "NTP Configuration on $ESXiHost started..." -ForegroundColor Green
+    $ESXiHost | Add-vmhostntpserver -ntpserver $NTP1  -confirm:$False -ErrorAction SilentlyContinue
+    $ESXiHost | Add-vmhostntpserver -ntpserver $NTP2  -confirm:$False -ErrorAction SilentlyContinue
+    $ntpservice = $ESXiHost | get-vmhostservice | Where-Object {$_.key -eq "ntpd"} 
+    Set-vmhostservice -HostService $ntpservice -Policy "on" -confirm:$False | Out-Null
+    $hosttimesystem = get-view $ESXiHost.ExtensionData.ConfigManager.DateTimeSystem 
+    $hosttimesystem.UpdateDateTime([DateTime]::UtcNow) 
+    start-vmhostservice -HostService $ntpservice -confirm:$False | Out-Null
+    Write-Host "NTP Configuration on $ESXiHost finished..." -ForegroundColor Green
 
-# Report Services with Enabled Incomming Port Exceptions
-Write-Host "Services on $ESXiHost.Name with Enabled Incomming Port Exceptions:" -ForegroundColor Green
-$ESXiHost| Get-VMHostFirewallException | where {$_.Enabled -eq "True" -and $_.IncomingPorts -ne ""} | Out-Default
+    # Report Services with Enabled Incomming Port Exceptions
+    Write-Host "Services on $ESXiHost with Enabled Incomming Port Exceptions:" -ForegroundColor Green
+    $ESXiHost| Get-VMHostFirewallException | where {$_.Enabled -eq "True" -and $_.IncomingPorts -ne ""} | Out-Default
 
-$esxcli = Get-EsxCli -VMHost $ESXiHost
-Try {
-        Write-Host "Configuring Firewall SNMP Strict Exception..." -ForegroundColor Green
+    $esxcli = Get-EsxCli -VMHost $ESXiHost
+    # SNMP
+    Try {
+        Write-Host "Configuring Firewall SNMP Strict Exception on $ESXiHost started..." -ForegroundColor Green
         $esxcli.network.firewall.ruleset.set($false,$true,'snmp')
         }
 
@@ -61,8 +78,8 @@ Try {
                 { Write-Host $_.Exception -ForegroundColor Red}
                 }
             }
-Try {
-        Write-Host "Configuring Firewall SNMP IP Exception..." -ForegroundColor Green
+    Try {
+        Write-Host "Configuring Firewall SNMP IP Exception on $ESXiHost started..." -ForegroundColor Green
         $esxcli.network.firewall.ruleset.allowedip.add($SNMP_NET,'snmp') 
         }
 
@@ -77,8 +94,74 @@ Try {
                 { Write-Host $_.Exception -ForegroundColor Red}
                 }
             }
+    # mgmtServices
+    foreach ($mgmtService in $mgmtServices){
+        Try {
+            Write-Host "Configuring Firewall $mgmtService Strict Exception on $ESXiHost started..." -ForegroundColor Green
+            $esxcli.network.firewall.ruleset.set($false,$true,$mgmtService)
+            }
 
+            Catch {
+        
+                Switch -Wildcard ($_.Exception)
+                    {
+                    "*Already use allowed ip list*"
+                    {Write-Host "...Already use allowed ip list" -ForegroundColor Yellow}
 
+                    Default
+                    { Write-Host $_.Exception -ForegroundColor Red}
+                    }
+                }
+        Try {
+            Write-Host "Configuring Firewall $mgmtService IP Exception on $ESXiHost started..." -ForegroundColor Green
+            $esxcli.network.firewall.ruleset.allowedip.add($MGMT_NET,$mgmtService) 
+            }
 
+            Catch {
+        
+                Switch -Wildcard ($_.Exception)
+                   {
+                    "*Ip address already exist*"
+                    {Write-Host "...Ip address already exist" -ForegroundColor Yellow}
+
+                    Default
+                    { Write-Host $_.Exception -ForegroundColor Red}
+                    }
+                }
+    }
+# SSH Service
+    if ($SSHenaled -eq "True"){
+        #Enable SSH and disable SSH Warning
+        Write-Host "Configuring SSH Service on $ESXiHost started..." -ForegroundColor Green
+        $SSHService = $ESXiHost | Get-VMHostService | where {$_.Key -eq 'TSM-SSH'} 
+        Start-VMHostService -HostService $SSHService -Confirm:$false | Out-Null
+        Set-VMHostService -HostService $SSHService -Policy Automatic | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.SuppressShellWarning | Set-AdvancedSetting -Value 1 -Confirm:$false | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellInteractiveTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
+        }
+        else{
+        #Disabling SSH and Enabling SSH Warning
+        Write-Host "Configuring SSH Service on $ESXiHost started..." -ForegroundColor Green
+        $SSHService = $ESXiHost | Get-VMHostService | where {$_.Key -eq 'TSM-SSH'} 
+        Stop-VMHostService -HostService $SSHService -Confirm:$false | Out-Null
+        Set-VMHostService -HostService $SSHService -Policy Off | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.SuppressShellWarning | Set-AdvancedSetting -Value 0 -Confirm:$false | Out-Null
+        }
+# Syslog Servcice
+    if ($Syslogenaled -eq "True"){
+        #Enabling Syslog and Configuring
+        Write-Host "Configuring Syslog Service on $ESXiHost started..." -ForegroundColor Green
+        $ESXiHost | Get-VMHostFirewallException |?{$_.Name -eq 'syslog'} | Set-VMHostFirewallException -Enabled:$true | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name Syslog.global.logHost | Set-AdvancedSetting -Value $SyslogServer -Confirm:$false | Out-Null
+        }
+        else{
+        #Disabling Syslog
+        Write-Host "Disabling Syslog Service on $ESXiHost started..." -ForegroundColor Green
+        $ESXiHost | Get-VMHostFirewallException |?{$_.Name -eq 'syslog'} | Set-VMHostFirewallException -Enabled:$false | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name Syslog.global.logHost | Set-AdvancedSetting -Value "" -Confirm:$false | Out-Null
+        }
+    
 }
+Disconnect-VIServer -Force -Confirm:$false
 
