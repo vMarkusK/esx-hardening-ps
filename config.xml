@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Config version="2.0">
+  <Variable Name="SNMP_NET" Value="172.20.1.0/24" />
+    <NTP>
+      <First>172.20.1.245</First>
+      <Second>172.20.1.246</Second>
+    </NTP>
+</Config>
