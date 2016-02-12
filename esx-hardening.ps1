@@ -24,9 +24,9 @@ if (!(Get-PSSnapin -name VMware.VimAutomation.Core -ErrorAction:SilentlyContinue
 
 ## Global
 $mgmtServices = @("sshClient","webAccess")
+$MenueForegroundcolor = "Black"
 ## Inputs
 # Menue
-$MenueForegroundcolor = "Black"
 Write-Host `n"ESXi Hardening Module" -ForeGroundColor $MenueForegroundcolor
 Write-Host `n"Type 'q' or hit enter to drop to shell"`n
 Write-Host -NoNewLine "<" -foregroundcolor $MenueForegroundcolor
@@ -50,18 +50,18 @@ Switch ($sel) {
 	$vCenter = [Microsoft.VisualBasic.Interaction]::InputBox("vCenter Host FQDN or IP", "Host", "vCenter.test.lab")
 	$HostExclude = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts to exclude", "WildCard", "esx01") 
 	# Start vCenter Connection
-	Write-Host "Starting to Process vCenter Connection to " $vCenter " ..."-ForegroundColor Magenta
+	Write-Host "`nStarting to Process vCenter Connection to " $vCenter " ..."-ForegroundColor Magenta
 	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $vCenter }
 	if($OpenConnection.IsConnected) {
-		Write-Host "vCenter is Already Connected..." -ForegroundColor Yellow
+		Write-Host "`nvCenter is Already Connected..." -ForegroundColor Yellow
 		$VIConnection = $OpenConnection
 	} else {
-		Write-Host "Connecting vCenter..."
+		Write-Host "`nConnecting vCenter..."
 		$VIConnection = Connect-VIServer -Server $vCenter
 	}
 
 	if (-not $VIConnection.IsConnected) {
-		Write-Error "Error: vCenter Connection Failed"
+		Write-Error "`nError: vCenter Connection Failed"
     	Exit
 	}
 	# End vCenter Connection
@@ -71,24 +71,32 @@ Switch ($sel) {
     "A2" {
 	$ESXiHost = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
 	# Start ESXi Connection
-	Write-Host "Starting to Process vCenter Connection to " $ESXiHost " ..."-ForegroundColor Magenta
+	Write-Host "`nStarting to Process vCenter Connection to " $ESXiHost " ..."-ForegroundColor Magenta
 	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $ESXiHost }
 	if($OpenConnection.IsConnected) {
-		Write-Host "ESXi is Already Connected..." -ForegroundColor Yellow
+		Write-Host "`nESXi is Already Connected..." -ForegroundColor Yellow
 		$VIConnection = $OpenConnection
 	} else {
-		Write-Host "Connecting vCenter..."
+		Write-Host "`nConnecting ESXi..."
 		$VIConnection = Connect-VIServer -Server $ESXiHost
 	}
 
 	if (-not $VIConnection.IsConnected) {
-		Write-Error "Error: ESXi Connection Failed"
+		Write-Error "`nError: ESXi Connection Failed"
     	Exit
 	}
 	# End ESXi Connection
 	$ESXiHostList = Get-VMHost
 	}
+	{($_ -like "*q*") -or ($_ -eq "")} {
+        Write-Host "`nNo input or 'q' seen... dropping to shell" -foregroundColor $foregroundColor       
+        Exit
+    }         
 }
+If (($ESXiHostList).Count -lt 1) {
+    Write-Error "`nError: No Hosts to Process... Exiting"
+    Exit
+    }
 
 # Read XML
 $Validate = $true
