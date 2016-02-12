@@ -1,8 +1,27 @@
-﻿## Preparation
-# Load SnapIn
-if (!(get-pssnapin -name VMware.VimAutomation.Core -erroraction silentlycontinue)) {
-    add-pssnapin VMware.VimAutomation.Core
+#############################################################################  
+# ESXi Hardening Script 
+# Written by Markus Kraus
+# Version 1.1, 02.2016  
+#  
+# https://mycloudrevolution.wordpress.com/ 
+#  
+# Changelog:  
+# 2016.01 ver 1.0 Base Release  
+# 2016.02 ver 1.1   
+#  
+#  
+##############################################################################  
+
+## Preparation
+# Load Snapin (if not already loaded)
+if (!(Get-PSSnapin -name VMware.VimAutomation.Core -ErrorAction:SilentlyContinue)) {
+	if (!(Add-PSSnapin -PassThru VMware.VimAutomation.Core)) {
+		# Error out if loading fails
+		write-host "`nFATAL ERROR: Cannot load the VIMAutomation Core Snapin. Is the PowerCLI installed?`n"
+		exit
+	}
 }
+
 # Global
 $mgmtServices = @("sshClient","webAccess")
 # Inputs
