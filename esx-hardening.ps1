@@ -70,7 +70,22 @@ Switch ($sel) {
 	}
     "A2" {
 	$ESXiHost = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
-	$trash = Connect-VIServer $ESXiHost
+	# Start ESXi Connection
+	Write-Host "Starting to Process vCenter Connection to " $ESXiHost " ..."-ForegroundColor Magenta
+	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $ESXiHost }
+	if($OpenConnection.IsConnected) {
+		Write-Host "ESXi is Already Connected..." -ForegroundColor Yellow
+		$VIConnection = $OpenConnection
+	} else {
+		Write-Host "Connecting vCenter..."
+		$VIConnection = Connect-VIServer -Server $ESXiHost
+	}
+
+	if (-not $VIConnection.IsConnected) {
+		Write-Error "Error: ESXi Connection Failed"
+    	Exit
+	}
+	# End ESXi Connection
 	$ESXiHostList = Get-VMHost
 	}
 }
