@@ -22,13 +22,58 @@ if (!(Get-PSSnapin -name VMware.VimAutomation.Core -ErrorAction:SilentlyContinue
 	}
 }
 
-# Global
+## Global
 $mgmtServices = @("sshClient","webAccess")
-# Inputs
+## Inputs
+# Menue
+$MenueForegroundcolor = "Black"
+Write-Host `n"ESXi Hardening Module" -ForeGroundColor $MenueForegroundcolor
+Write-Host `n"Type 'q' or hit enter to drop to shell"`n
+Write-Host -NoNewLine "<" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "ESXi or vCenter Connection?"
+Write-Host -NoNewLine ">" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "["
+Write-Host -NoNewLine "A" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "]"
+
+Write-Host -NoNewLine `t`n "A1 - " -foregroundcolor $MenueForegroundcolor
+Write-host -NoNewLine "vCenter"
+Write-Host -NoNewLine `t`n "A2 - " -foregroundcolor $MenueForegroundcolor
+Write-host -NoNewLine "ESXi"
+
+$sel = Read-Host "Which option?"
+
+# Connections
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null
-$HostList = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
-$trasg = Connect-VIServer $HostList
-$ESXiHostList = Get-VMHost
+Switch ($sel) {
+    "A1" {
+	$vCenter = [Microsoft.VisualBasic.Interaction]::InputBox("vCenter Host FQDN or IP", "Host", "vCenter.test.lab")
+	$HostExclude = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts to exclude", "WildCard", "esx01") 
+	# Start vCenter Connection
+	Write-Host "Starting to Process vCenter Connection to " $vCenter " ..."-ForegroundColor Magenta
+	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $vCenter }
+	if($OpenConnection.IsConnected) {
+		Write-Host "vCenter is Already Connected..." -ForegroundColor Yellow
+		$VIConnection = $OpenConnection
+	} else {
+		Write-Host "Connecting vCenter..."
+		$VIConnection = Connect-VIServer -Server $vCenter
+	}
+
+	if (-not $VIConnection.IsConnected) {
+		Write-Error "Error: vCenter Connection Failed"
+    	Exit
+	}
+	# End vCenter Connection
+
+	$ESXiHostList = Get-VMHost | Where-Object {$_.Name -notmatch $HostExclude}
+	}
+    "A2" {
+	$ESXiHost = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
+	$trash = Connect-VIServer $ESXiHost
+	$ESXiHostList = Get-VMHost
+	}
+}
 
 # Read XML
 $Validate = $true
@@ -62,7 +107,7 @@ If ($Validate) {
     }
 
 
-
+## Execute
 foreach ($ESXiHost in $ESXiHostList){
     # Configure NTP
     Write-Host "NTP Configuration on $ESXiHost started..." -ForegroundColor Green
