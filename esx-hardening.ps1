@@ -48,12 +48,12 @@ $sel = Read-Host "Which option?"
 Switch ($sel) {
     "A1" {
 	$vCenter = [Microsoft.VisualBasic.Interaction]::InputBox("vCenter Host FQDN or IP", "Host", "vCenter.test.lab")
-	$HostExclude = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts to exclude", "WildCard", "esx01") 
+	$HostExclude = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts to exclude", "WildCard", "esx01|esx02") 
 	# Start vCenter Connection
 	Write-Host "`nStarting to Process vCenter Connection to " $vCenter " ..."-ForegroundColor Magenta
 	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $vCenter }
 	if($OpenConnection.IsConnected) {
-		Write-Host "`nvCenter is Already Connected..." -ForegroundColor Yellow
+		Write-Host "`nvCenter is Already Connected..." -ForegroundColor Blue
 		$VIConnection = $OpenConnection
 	} else {
 		Write-Host "`nConnecting vCenter..."
@@ -71,10 +71,10 @@ Switch ($sel) {
     "A2" {
 	$ESXiHost = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
 	# Start ESXi Connection
-	Write-Host "`nStarting to Process vCenter Connection to " $ESXiHost " ..."-ForegroundColor Magenta
+	Write-Host "`nStarting to Process ESXi Connection to " $ESXiHost " ..."-ForegroundColor Magenta
 	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $ESXiHost }
 	if($OpenConnection.IsConnected) {
-		Write-Host "`nESXi is Already Connected..." -ForegroundColor Yellow
+		Write-Host "`nESXi is Already Connected..." -ForegroundColor Blue
 		$VIConnection = $OpenConnection
 	} else {
 		Write-Host "`nConnecting ESXi..."
@@ -105,6 +105,7 @@ If (Test-Path ".\Config.xml") {
     } Else {
         $Validate = $false
         Write-Host "Missing Config.xml" -ForegroundColor Red
+		Exit
     }
 If ($Validate) {
         Write-Host "Reading XML Inputs:" -ForegroundColor Green
@@ -159,7 +160,7 @@ foreach ($ESXiHost in $ESXiHostList){
             Switch -Wildcard ($_.Exception)
                 {
                 "*Already use allowed ip list*"
-                {Write-Host "...Already use allowed ip list" -ForegroundColor Yellow}
+                {Write-Host "...Already use allowed ip list" -ForegroundColor Blue}
 
                 Default
                 { Write-Host $_.Exception -ForegroundColor Red}
@@ -175,7 +176,7 @@ foreach ($ESXiHost in $ESXiHostList){
             Switch -Wildcard ($_.Exception)
                 {
                 "*Ip address already exist*"
-                {Write-Host "...Ip address already exist" -ForegroundColor Yellow}
+                {Write-Host "...Ip address already exist" -ForegroundColor Blue}
 
                 Default
                 { Write-Host $_.Exception -ForegroundColor Red}
@@ -193,7 +194,7 @@ foreach ($ESXiHost in $ESXiHostList){
                 Switch -Wildcard ($_.Exception)
                     {
                     "*Already use allowed ip list*"
-                    {Write-Host "...Already use allowed ip list" -ForegroundColor Yellow}
+                    {Write-Host "...Already use allowed ip list" -ForegroundColor Blue}
 
                     Default
                     { Write-Host $_.Exception -ForegroundColor Red}
@@ -209,7 +210,7 @@ foreach ($ESXiHost in $ESXiHostList){
                 Switch -Wildcard ($_.Exception)
                    {
                     "*Ip address already exist*"
-                    {Write-Host "...Ip address already exist" -ForegroundColor Yellow}
+                    {Write-Host "...Ip address already exist" -ForegroundColor Blue}
 
                     Default
                     { Write-Host $_.Exception -ForegroundColor Red}
@@ -224,8 +225,8 @@ foreach ($ESXiHost in $ESXiHostList){
         Start-VMHostService -HostService $SSHService -Confirm:$false | Out-Null
         Set-VMHostService -HostService $SSHService -Policy Automatic | Out-Null
         Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.SuppressShellWarning | Set-AdvancedSetting -Value 1 -Confirm:$false | Out-Null
-        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellInteractiveTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
-        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellInteractiveTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$false | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$false | Out-Null
         }
         else{
         #Disabling SSH and Enabling SSH Warning
