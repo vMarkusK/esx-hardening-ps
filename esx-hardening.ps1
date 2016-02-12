@@ -1,15 +1,102 @@
-﻿## Preparation
-# Load SnapIn
-if (!(get-pssnapin -name VMware.VimAutomation.Core -erroraction silentlycontinue)) {
-    add-pssnapin VMware.VimAutomation.Core
+#############################################################################  
+# ESXi Hardening Script 
+# Written by Markus Kraus
+# Version 1.1, 02.2016  
+#  
+# https://mycloudrevolution.wordpress.com/ 
+#  
+# Changelog:  
+# 2016.01 ver 1.0 Base Release  
+# 2016.02 ver 1.1   
+#  
+#  
+##############################################################################  
+
+## Preparation
+# Load Snapin (if not already loaded)
+if (!(Get-PSSnapin -name VMware.VimAutomation.Core -ErrorAction:SilentlyContinue)) {
+	if (!(Add-PSSnapin -PassThru VMware.VimAutomation.Core)) {
+		# Error out if loading fails
+		write-host "`nFATAL ERROR: Cannot load the VIMAutomation Core Snapin. Is the PowerCLI installed?`n"
+		exit
+	}
 }
-# Global
+
+## Global
 $mgmtServices = @("sshClient","webAccess")
-# Inputs
+$MenueForegroundcolor = "Black"
+## Inputs
+# Menue
+Write-Host `n"ESXi Hardening Module" -ForeGroundColor $MenueForegroundcolor
+Write-Host `n"Type 'q' or hit enter to drop to shell"`n
+Write-Host -NoNewLine "<" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "ESXi or vCenter Connection?"
+Write-Host -NoNewLine ">" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "["
+Write-Host -NoNewLine "A" -foregroundcolor $MenueForegroundcolor
+Write-Host -NoNewLine "]"
+
+Write-Host -NoNewLine `t`n "A1 - " -foregroundcolor $MenueForegroundcolor
+Write-host -NoNewLine "vCenter"
+Write-Host -NoNewLine `t`n "A2 - " -foregroundcolor $MenueForegroundcolor
+Write-host -NoNewLine "ESXi"
+
+$sel = Read-Host "Which option?"
+
+# Connections
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null
-$HostList = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
-$trasg = Connect-VIServer $HostList
-$ESXiHostList = Get-VMHost
+Switch ($sel) {
+    "A1" {
+	$vCenter = [Microsoft.VisualBasic.Interaction]::InputBox("vCenter Host FQDN or IP", "Host", "vCenter.test.lab")
+	$HostExclude = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Hosts to exclude", "WildCard", "esx01|esx02") 
+	# Start vCenter Connection
+	Write-Host "`nStarting to Process vCenter Connection to " $vCenter " ..."-ForegroundColor Magenta
+	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $vCenter }
+	if($OpenConnection.IsConnected) {
+		Write-Host "`nvCenter is Already Connected..." -ForegroundColor Blue
+		$VIConnection = $OpenConnection
+	} else {
+		Write-Host "`nConnecting vCenter..."
+		$VIConnection = Connect-VIServer -Server $vCenter
+	}
+
+	if (-not $VIConnection.IsConnected) {
+		Write-Error "`nError: vCenter Connection Failed"
+    	Exit
+	}
+	# End vCenter Connection
+
+	$ESXiHostList = Get-VMHost | Where-Object {$_.Name -notmatch $HostExclude}
+	}
+    "A2" {
+	$ESXiHost = [Microsoft.VisualBasic.Interaction]::InputBox("ESXi Host FQDN or IP", "Host", "esx01.test.lab") 
+	# Start ESXi Connection
+	Write-Host "`nStarting to Process ESXi Connection to " $ESXiHost " ..."-ForegroundColor Magenta
+	$OpenConnection = $global:DefaultVIServers | where { $_.Name -eq $ESXiHost }
+	if($OpenConnection.IsConnected) {
+		Write-Host "`nESXi is Already Connected..." -ForegroundColor Blue
+		$VIConnection = $OpenConnection
+	} else {
+		Write-Host "`nConnecting ESXi..."
+		$VIConnection = Connect-VIServer -Server $ESXiHost
+	}
+
+	if (-not $VIConnection.IsConnected) {
+		Write-Error "`nError: ESXi Connection Failed"
+    	Exit
+	}
+	# End ESXi Connection
+	$ESXiHostList = Get-VMHost
+	}
+	{($_ -like "*q*") -or ($_ -eq "")} {
+        Write-Host "`nNo input or 'q' seen... dropping to shell" -foregroundColor $foregroundColor       
+        Exit
+    }         
+}
+If (($ESXiHostList).Count -lt 1) {
+    Write-Error "`nError: No Hosts to Process... Exiting"
+    Exit
+    }
 
 # Read XML
 $Validate = $true
@@ -18,6 +105,7 @@ If (Test-Path ".\Config.xml") {
     } Else {
         $Validate = $false
         Write-Host "Missing Config.xml" -ForegroundColor Red
+		Exit
     }
 If ($Validate) {
         Write-Host "Reading XML Inputs:" -ForegroundColor Green
@@ -43,7 +131,7 @@ If ($Validate) {
     }
 
 
-
+## Execute
 foreach ($ESXiHost in $ESXiHostList){
     # Configure NTP
     Write-Host "NTP Configuration on $ESXiHost started..." -ForegroundColor Green
@@ -72,7 +160,7 @@ foreach ($ESXiHost in $ESXiHostList){
             Switch -Wildcard ($_.Exception)
                 {
                 "*Already use allowed ip list*"
-                {Write-Host "...Already use allowed ip list" -ForegroundColor Yellow}
+                {Write-Host "...Already use allowed ip list" -ForegroundColor Blue}
 
                 Default
                 { Write-Host $_.Exception -ForegroundColor Red}
@@ -88,7 +176,7 @@ foreach ($ESXiHost in $ESXiHostList){
             Switch -Wildcard ($_.Exception)
                 {
                 "*Ip address already exist*"
-                {Write-Host "...Ip address already exist" -ForegroundColor Yellow}
+                {Write-Host "...Ip address already exist" -ForegroundColor Blue}
 
                 Default
                 { Write-Host $_.Exception -ForegroundColor Red}
@@ -106,7 +194,7 @@ foreach ($ESXiHost in $ESXiHostList){
                 Switch -Wildcard ($_.Exception)
                     {
                     "*Already use allowed ip list*"
-                    {Write-Host "...Already use allowed ip list" -ForegroundColor Yellow}
+                    {Write-Host "...Already use allowed ip list" -ForegroundColor Blue}
 
                     Default
                     { Write-Host $_.Exception -ForegroundColor Red}
@@ -122,7 +210,7 @@ foreach ($ESXiHost in $ESXiHostList){
                 Switch -Wildcard ($_.Exception)
                    {
                     "*Ip address already exist*"
-                    {Write-Host "...Ip address already exist" -ForegroundColor Yellow}
+                    {Write-Host "...Ip address already exist" -ForegroundColor Blue}
 
                     Default
                     { Write-Host $_.Exception -ForegroundColor Red}
@@ -137,8 +225,8 @@ foreach ($ESXiHost in $ESXiHostList){
         Start-VMHostService -HostService $SSHService -Confirm:$false | Out-Null
         Set-VMHostService -HostService $SSHService -Policy Automatic | Out-Null
         Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.SuppressShellWarning | Set-AdvancedSetting -Value 1 -Confirm:$false | Out-Null
-        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellInteractiveTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
-        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$fals | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellInteractiveTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$false | Out-Null
+        Get-AdvancedSetting -Entity $ESXiHost.name -Name UserVars.ESXiShellTimeOut | Set-AdvancedSetting -Value $SSHTimeout -Confirm:$false | Out-Null
         }
         else{
         #Disabling SSH and Enabling SSH Warning
